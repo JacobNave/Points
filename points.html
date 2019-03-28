@@ -1,0 +1,353 @@
+<html>
+    <body>
+        <canvas id = "background" width = "500px" height = "500px" style="z-index: 1; position:absolute; left:0px; top:0px;"></canvas>
+        <canvas id = "points" width = "500px" height = "500px" style="z-index: 2; position:absolute; left:0px; top:0px;"></canvas>
+        <canvas id = "lines" width = "500px" height = "500px" style="z-index: 3; position:absolute; left:0px; top:0px;"></canvas>
+        <input type = "button" value = "Reset" onclick="reset()" style="position:absolute; left:0px; top:500px;">
+        <div style="position:absolute; left:0px; top:520px;" >Click to add points</div>
+        <div style="position:absolute; left:0px; top:537px;">Hold shift and click a point to delete it</div>
+    </body>
+    
+    <script>
+        class Point
+        {
+            constructor(x, y)
+            {
+                this.x = Math.floor(x);
+                this.y = Math.floor(y);
+            }
+    
+            getX()
+            {
+                return this.x;
+            }
+    
+            getY()
+            {
+                return this.y; 
+            }
+            
+            equals(point)
+            {
+                if(this.x == point.getX() || this.y == point.getY())
+                {
+                    return true;
+                }
+                return false;
+            }
+        }
+        
+        class Vector
+        {
+            constructor(x, y)
+            {
+                this.x = x;
+                this.y = y;
+            }
+            
+            getXPoint()
+            {
+                return this.x;
+            }
+            
+            getYPoint()
+            {
+                return this.y;
+            }
+            
+            getLength()
+            {
+                return Math.sqrt(Math.pow((this.x.getX() - this.y.getX()), 2) + Math.pow(this.x.getY() - this.y.getY(), 2));
+            }
+        }
+        
+        var points = [];
+        var shiftDown = false;//is true if the shift key is held down
+        
+        //create canvases and contexts
+        var background = document.getElementById("background");
+        var backgroundCtx = background.getContext("2d");
+        var pointsCanvas = document.getElementById("points");
+        var pointsCtx = pointsCanvas.getContext("2d");
+        var lines = document.getElementById("lines");
+        var linesCtx = lines.getContext("2d");
+        
+        drawBackground();
+        
+        document.addEventListener("keydown",keyDown);
+        document.addEventListener("keyup",keyUp);
+        //listen for mouse clicks and draws then solves the new hull
+        lines.addEventListener('mousedown', function(evt){
+            if(!shiftDown)
+            {
+                mousePos = getMousePos(lines, evt);
+                points.push(new Point(mousePos.x, mousePos.y));
+                drawPoints();
+                solve();
+            }
+            else
+            {
+                mousePos = getMousePos(lines, evt);
+                closestPoint = getClosestPoint(new Point(mousePos.x, mousePos.y));
+                if(closestPoint != null)
+                {
+                    points.splice(points.indexOf(closestPoint), 1);
+                }
+                drawPoints();
+                solve();
+            }
+        }, false);
+        
+
+        //draws the points in var points as small circles
+        function drawPoints()
+        {
+            pointsCtx.clearRect(0, 0, pointsCanvas.width, pointsCanvas.height);
+            
+            for(var rep = 0; rep < points.length; rep++)
+            {
+                pointsCtx.fillStyle = "white";
+                pointsCtx.beginPath();
+                pointsCtx.arc(points[rep].getX(), points[rep].getY(), 3, 0, 2*Math.PI);
+                pointsCtx.fill();
+            }
+        }
+        
+        function solve()
+        {
+            if(points.length > 2)
+            {
+                var start = getStartPoint(points);
+                var currentPoint = start;
+                var atStart = true;
+                var hullPoints = [];
+                hullPoints.push(currentPoint);
+                
+                while(atStart || currentPoint != start)
+                {
+                    var nextPoint = getNextPoint(currentPoint, points);
+                    hullPoints.push(nextPoint);
+                    currentPoint = nextPoint;
+                    atStart = false;
+                }
+                
+                drawHull(hullPoints);
+            }
+            else
+            {
+                linesCtx.clearRect(0, 0, lines.width, lines.height);        
+            }
+        }
+        
+        //draw a black background
+        function drawBackground()
+        {
+            backgroundCtx.fillStyle = "black";
+            backgroundCtx.fillRect(0, 0, background.width, background.height);
+        }
+        
+        function getMousePos(canvas, evt) {
+        var rect = canvas.getBoundingClientRect();
+        return {
+          x: evt.clientX - rect.left,
+          y: evt.clientY - rect.top
+            };
+        }
+        
+        //clears the points array
+        function reset()
+        {
+            points = [];
+            linesCtx.clearRect(0, 0, lines.width, lines.height);
+            drawPoints();
+        }
+        
+        
+        function getStartPoint(array)
+        {
+            var startPoint = array[0];
+            
+            for(var rep = 1; rep < array.length; rep++)
+            {
+                if(array[rep].getX() > startPoint.getX())
+                {
+                    startPoint = array[rep];
+                }
+            }
+            
+            return startPoint;
+        }
+        
+        function getNextPoint(current, array)
+        {
+            var newArray = copyArray(array);
+            //remove the current point from the new array 
+            newArray.splice(newArray.indexOf(current), 1);
+            removeDoubles(newArray);
+            var possiblePoints = [];
+            for(var rep1 = 0; rep1 < newArray.length; rep1++)
+            {
+                var add = true;
+                for(var rep2 = 0; rep2 < newArray.length; rep2++)
+                {
+                    if(rep1 != rep2)
+                    {
+                        if(getCrossProduct(new Vector(current, newArray[rep1]), new Vector(current, newArray[rep2])) >= 0)
+                        {
+                            add = false;
+                            break;
+                        }
+                    }
+                }
+                
+                if(add)
+                {
+                   possiblePoints.push(newArray[rep1]);
+                }
+            }
+            
+            return getFurthest(current, possiblePoints);
+        }
+        
+        
+        function getDistance(point1, point2)
+        {
+            return Math.sqrt(Math.pow((point1.getX() - point2.getX()), 2) + Math.pow(point1.getY() - point2.getY(), 2));
+        }
+        
+        function drawHull(array)
+        {
+            linesCtx.clearRect(0, 0, lines.width, lines.height);
+            linesCtx.strokeStyle = "orange";
+            linesCtx.lineWidth = 3;
+            linesCtx.fillStyle = "yellow";
+            linesCtx.globalAlpha = .5;
+            linesCtx.beginPath();
+            for(var rep = 0; rep < array.length - 1; rep++)
+            {
+                linesCtx.lineTo(array[rep].getX(), array[rep].getY());
+                linesCtx.lineTo(array[rep + 1].getX(), array[rep + 1].getY());
+            }
+            //linesCtx.moveTo(array[array.length - 1].getX(), array[array.length - 1].getY());
+            linesCtx.lineTo(array[0].getX(), array[0].getY());
+            
+            linesCtx.fill();
+            linesCtx.globalAlpha = 1;
+            linesCtx.stroke();
+            linesCtx.closePath();
+            
+            for(var rep = 0; rep < array.length - 1; rep++)
+            {
+                linesCtx.font="13px Verdana";
+                linesCtx.fillStyle = "red";
+                linesCtx.fillText(rep + 1,array[rep].getX() + 5,array[rep].getY() - 5);
+                linesCtx.closePath();
+            }
+        }
+        
+        function getCrossProduct(vector1, vector2)
+        {
+            var x1 = vector1.getXPoint().getX() - vector1.getYPoint().getX();
+            var x2 = vector2.getXPoint().getX() - vector2.getYPoint().getX();
+            var y1 = vector1.getXPoint().getY() - vector1.getYPoint().getY();
+            var y2 = vector2.getXPoint().getY() - vector2.getYPoint().getY();
+            return y2*x1 - y1*x2;
+        }
+        
+        function getFurthest(currentPoint, array)
+        {
+            var furthest = array[0];
+            for(var rep = 1; rep < array.length; rep++)
+            {
+                if(getDistance(currentPoint, furthest) < getDistance(currentPoint, array[rep]))
+                {
+                   furthest = array[rep];
+                }
+            }
+            return furthest;
+        }
+        
+        function copyArray(array)
+        {
+            var newArray = [];
+            for(var rep = 0; rep < array.length; rep++)
+            {
+                newArray.push(array[rep]);
+            }
+            return newArray;
+        }
+
+        //remove to prevent angle errors and prevent slowdown
+        function removeDoubles(array)
+        {
+            var toClear = [];
+            for(var rep1 = 0; rep1 < array.length - 1; rep1++)
+            {
+                for(var rep2 = rep1 + 1; rep2 <array.length; rep2++)
+                {
+                    if(array[rep1] == array[rep2])
+                    {
+                        toClear.push(rep2);
+                    }
+                }
+                clearPoints(toClear, array);
+            }
+        }
+
+        function clearPoints(pointsArray, array)
+        {
+            pointsArray.sort();
+            for(var rep = 0; rep < pointsArray.length; rep++)
+            {
+                array.splice(pointsArray[rep]);
+            }
+        }
+
+        function keyDown(evt)
+        {
+            if(evt.keyCode == 16)
+            {
+                shiftDown = true;
+            }
+        }
+        
+        function keyUp(evt)
+        {
+            if(evt.keyCode == 16)
+            {
+                shiftDown = false;
+            }
+        }
+        
+        function getClosestPoint(point)
+        {
+            if(points.length > 0)
+            {
+                var closestPoint = points[0];
+                for(var rep = 0; rep < points.length; rep++)
+                {
+                    if(getDistance(point, closestPoint) > getDistance(point, points[rep]))
+                    {
+                        closestPoint = points[rep];
+                    }
+                }
+                if(getDistance(point, closestPoint) < 5)
+                {
+                    return closestPoint;
+                }
+                else 
+                {
+                    return null;
+                }
+            }
+            else 
+            {
+                return null;
+            }
+        }
+        
+    </script>
+</html>
+
+
+
